@@ -1,0 +1,42 @@
+# ═══════════════════════════════════════════════════
+# Tez Araştırma Asistanı - .gitignore
+# ═══════════════════════════════════════════════════
+
+# Environment
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+
+# Data caches & downloaded PDFs
+data/cache/
+data/papers/pdfs/
+
+# Logs
+logs/
+
+# Node
+node_modules/
+
+# Temp files
+*.tmp
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
