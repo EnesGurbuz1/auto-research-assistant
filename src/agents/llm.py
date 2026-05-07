@@ -1,48 +1,45 @@
 """
-Ortak LLM yardımcısı — google-genai SDK (Gemini 2.0 Flash).
+Ortak LLM yardımcısı — google-genai SDK (Gemini 2.5 Flash).
 """
 
 import os
 import json
-from typing import Optional
 from loguru import logger
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 
 MODEL = "gemini-2.5-flash"
 
-_client: Optional[genai.Client] = None
+_configured = False
 
 
-def _get_client() -> genai.Client:
-    global _client
-    if _client is None:
-        api_key = os.getenv("GEMINI_API_KEY", "")
-        if not api_key:
-            raise RuntimeError("GEMINI_API_KEY ortam değişkeni ayarlanmamış!")
-        _client = genai.Client(api_key=api_key)
-    return _client
+def _ensure_configured():
+    global _configured
+    if _configured:
+        return
+
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY ortam değişkeni ayarlanmamış!")
+
+    genai.configure(api_key=api_key)
+    _configured = True
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=20), reraise=True)
 def generate(prompt: str, system: str = "", temperature: float = 0.3) -> str:
     """LLM'den metin yanıtı üret."""
-    client = _get_client()
+    _ensure_configured()
 
-    contents = [types.Content(role="user", parts=[types.Part(text=prompt)])]
-    config = types.GenerateContentConfig(
+    generation_config = genai.types.GenerationConfig(
         temperature=temperature,
         max_output_tokens=8192,
-        system_instruction=system if system else None,
     )
 
-    response = client.models.generate_content(
-        model=MODEL,
-        contents=contents,
-        config=config,
-    )
+    full_prompt = f"{system}\n\n---\n\n{prompt}" if system else prompt
+    model = genai.GenerativeModel(MODEL)
+    response = model.generate_content(full_prompt, generation_config=generation_config)
     return response.text or ""
 
 
@@ -54,7 +51,11 @@ def generate_json(prompt: str, system: str = "") -> dict:
         "Yalnızca ham JSON objesi."
     )
     raw = generate(prompt + json_hint, system=system, temperature=0.1)
-    cleaned = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+    import re
+    cleaned = raw.strip()
+    cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned)
+    cleaned = re.sub(r'\s*```$', '', cleaned)
+    cleaned = cleaned.strip()
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
