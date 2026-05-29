@@ -51,7 +51,7 @@ def search_arxiv(query: str, max_results: int = 20, max_retries: int = 3) -> Lis
                     "published": paper.published.isoformat() if paper.published else "",
                     "abstract": paper.summary or "",
                     "categories": list(paper.categories),
-                    "pdf_url": paper.pdf_url or "",
+                    "pdf_url": (paper.pdf_url or "").rstrip("/") + (".pdf" if paper.pdf_url and not (paper.pdf_url or "").endswith(".pdf") else ""),
                     "arxiv_url": paper.entry_id or "",
                     "source": "arxiv",
                     "query": query,

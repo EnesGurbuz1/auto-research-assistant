@@ -1,254 +1,249 @@
-# 🔬 Otonom Tez Araştırma Asistanı
+# 🔬 Otonom Araştırma Asistanı
 
-## Tez Konusu
-**Başlık:** Çoklu Ajan (Multi-Agent) Şebeke Yük Pazarlığı
-**İngilizce:** Multi-Agent Grid Load Negotiation for EV Charging
-**Öğrenci:** Enes
+**Multi-agent literatür tarama, RAG tabanlı embedding ve grounded (kaynağa dayalı) sentez sistemi.**
 
----
+Bir araştırma sorusu girersiniz; sistem otomatik olarak bir araştırma planı çıkarır, akademik kaynakları (arXiv / Scopus / Zotero / Google Drive) tarar, makaleleri bir vektör veritabanına işler, PDF'lerin tam metnini çıkarıp parçalara böler ve sonunda **yalnızca bulduğu kaynaklara dayanan**, atıflı bir sentez raporu üretir.
 
-## Proje Açıklaması
-
-Bir binadaki veya filodaki şarj olan araçların her birinin kendi dijital ajanı olduğu; bu ajanların kısıtlı şebeke elektriğini paylaşmak için birbirleriyle otonom olarak pazarlık yaptığı bir sistem konusunda kapsamlı literatür taraması yapan otonom araştırma asistanı.
-
-Bu araç, aşağıdaki görevleri tamamen otomatik olarak gerçekleştirir:
-- 📚 **Literatür taraması**: Google Scholar, Semantic Scholar, arXiv, Scopus
-- 📋 **Patent taraması**: Google Patents, Espacenet, WIPO, TÜRKPATENT
-- 📊 **Veri seti keşfi**: Kaggle, Zenodo, HuggingFace, Papers With Code, UCI, IEEE DataPort, OpenML
-- 🧪 **Sentez ve gap analizi**: LLM ile boşluk tespiti, trend analizi, aktör haritası
-- 📝 **Rapor üretimi**: DOCX (hocanın şablonu) + Markdown formatında haftalık raporlar
-- 🤖 **Otomasyon**: Zamanlı taramalar, GitHub sync, daemon modu
+> Bu proje, **Karadeniz Teknik Üniversitesi – Yazılım Mühendisliği Ana Bilim Dalı**, *Yapay Zeka için Bulut Bilişim* dersi kapsamında **Enes Buğra Gürbüz (458222)** tarafından hazırlanmıştır.
 
 ---
 
-## Sistem Mimarisi
+## 📑 İçindekiler
+
+1. [Sistem Nasıl Çalışır? (Özet)](#-sistem-nasıl-çalışır-özet)
+2. [Teknoloji Yığını](#-teknoloji-yığını)
+3. [Kurulum ve Başlatma Yardımcısı (İlk Kez Kullananlar İçin)](#-kurulum-ve-başlatma-yardımcısı-i̇lk-kez-kullananlar-i̇çin)
+4. [Uygulamayı Kullanma](#-uygulamayı-kullanma)
+5. [Arama Modları](#-arama-modları)
+6. [API Anahtarları](#-api-anahtarları)
+7. [Proje Yapısı](#-proje-yapısı)
+8. [Sık Karşılaşılan Sorunlar](#-sık-karşılaşılan-sorunlar)
+
+---
+
+## 🧭 Sistem Nasıl Çalışır? (Özet)
+
+Sistem, **LangGraph** ile kurulmuş 5 ajanlı bir boru hattıdır (pipeline). Ajanlar paylaşılan bir durum (state) üzerinden sırayla çalışır:
 
 ```
-                    ┌─────────────────────┐
-                    │   Smart Orchestrator │
-                    │   (Görev Planlayıcı) │
-                    └──────────┬──────────┘
-                               │
-          ┌────────────────────┼────────────────────┐
-          │                    │                     │
-    ┌─────▼─────┐      ┌──────▼──────┐      ┌──────▼──────┐
-    │ Literature │      │   Patent    │      │   Dataset   │
-    │   Scout    │      │  Scanner    │      │   Hunter    │
-    └─────┬─────┘      └──────┬──────┘      └──────┬──────┘
-          │                    │                     │
-          └────────────────────┼────────────────────┘
-                               │
-                    ┌──────────▼──────────┐
-                    │  Synthesis Agent    │
-                    │  (Sentez & Analiz)  │
-                    └──────────┬──────────┘
-                               │
-                    ┌──────────▼──────────┐
-                    │  Report Generator   │
-                    │  (Rapor Üretici)    │
-                    └─────────────────────┘
+Araştırma Sorusu
+      │
+      ▼
+🧠 Planner  ──►  📚 Literature  ──►  🗄️ Embed  ──►  📄 PDF & Chunk  ──►  🔬 Synthesis
+ (strateji +     (kaynaklardan      (vektör DB'ye    (PDF indir, parçala,   (per-paper +
+  4 arama         makale topla,      kaydet)          chunk'ları indeksle)   cross-paper
+  sorgusu)        dedup, filtrele)                                            sentez)
+      │
+      ▼
+Atıflı Sentez Raporu  (Markdown / JSON / CSV indirilebilir)
 ```
 
----
+| Ajan | Görevi |
+|------|--------|
+| 🧠 **Planner** | Sorguyu analiz eder; araştırma stratejisi ve birbirini tamamlayan 4 İngilizce arama sorgusu üretir. |
+| 📚 **Literature** | Seçilen kaynaklardan makaleleri toplar, tekilleştirir (dedup), yıl ve sayı filtresi uygular. |
+| 🗄️ **Embed** | Her makalenin başlık+özetini bir vektöre çevirip yerel Qdrant veritabanına yazar (paper-level RAG). |
+| 📄 **PDF & Chunk** | En alakalı makalelerin PDF'lerini indirir, metni çıkarır, ~1000 karakterlik parçalara böler ve ayrı bir koleksiyona indeksler (chunk-level RAG). |
+| 🔬 **Synthesis** | İki geçişli (multi-pass) sentez yapar: önce her makaleden yapılandırılmış bilgi çıkarır, sonra makaleler arası karşılaştırmalı, **atıflı** bir rapor üretir. |
 
-## Ajanlar
-
-| Ajan | Görev |
-|------|-------|
-| **Smart Orchestrator** | Tüm ajanları koordine eder, görev planlar |
-| **Literature Scout** | Google Scholar, Scopus, Semantic Scholar, arXiv'den makale arar |
-| **Patent Scanner** | Espacenet, Google Patents, TÜRKPATENT, WIPO'dan patent arar |
-| **Dataset Hunter** | Kaggle, UCI, HuggingFace, Zenodo, PWC, IEEE'den veri seti arar |
-| **Synthesis Agent** | Gap analizi, trend tespiti, aktör haritası üretir |
-| **Report Generator** | Haftalık rapor ve tez önerisi DOCX formatında üretir |
+Detaylı teknik açıklama için projedeki **`docs/`** klasöründeki rapora bakınız.
 
 ---
 
-## Danışman Direktifleri (Her raporda cevaplanır)
-1. Bu alanda çözülmüş ne var, çözülmemiş ne var?
-2. Kim çalışıyor, hangi gruplar, hangi şirketler?
-3. 2-3 yıl önce ile bugün arasında ne değişti?
-4. Survey/review makalelerini öncelikle incele
-5. Patentleri incele
-6. Veri setlerini MUTLAKA incele
-7. Haftalık ilerleme raporu hazırla
+## 🧰 Teknoloji Yığını
+
+| Katman | Teknoloji | Not |
+|--------|-----------|-----|
+| Orkestrasyon | **LangGraph** | Ajanlar arası durum makinesi |
+| LLM | **Google Gemini 2.5 Flash** | Bulut API (anahtar gerekir) |
+| Embedding | **sentence-transformers / all-MiniLM-L6-v2** | Yerel, 384 boyut, API'siz |
+| Vektör DB | **Qdrant** | Yerel disk modu, sunucu gerekmez |
+| Arayüz | **Streamlit** | Web tabanlı UI |
+| PDF | **PyMuPDF** | Tam metin çıkarımı |
+| Kaynaklar | arXiv API, Scopus (Elsevier), Zotero Web API, Google Drive (gdown) | |
 
 ---
 
-## Kurulum
+## 🚀 Kurulum ve Başlatma Yardımcısı
 
-### 1. Sanal ortam oluştur ve bağımlılıkları kur
+Aşağıdaki adımları sırayla takip edin. Tahmini süre: **5–10 dakika** (model indirme dahil).
+
+### Adım 0 — Gereksinimler
+
+- **Python 3.10 – 3.12** önerilir (3.13/3.14 de çalışır ancak bazı bağımlılıklar için 3.10–3.12 en güvenlidir).
+- Yaklaşık **500 MB** boş disk (bağımlılıklar + embedding modeli + indirilen PDF'ler).
+- Bir **Gemini API anahtarı** (ücretsiz alınabilir — bkz. [API Anahtarları](#-api-anahtarları)).
+
+Python sürümünüzü kontrol edin:
 
 ```bash
-cd thesis-research-agent
-python3 -m venv venv
-source venv/bin/activate
+python3 --version
+```
+
+### Adım 1 — Projeyi açın
+
+`.zip` dosyasını açtıysanız klasöre girin:
+
+```bash
+cd oto-research-multi-agent-ev-charging-main
+```
+
+### Adım 2 — Sanal ortam oluşturun (önerilir)
+
+**macOS / Linux:**
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+**Windows (PowerShell):**
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+### Adım 3 — Bağımlılıkları kurun
+
+```bash
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 2. API anahtarlarını ayarla
+> İlk kurulumda `torch` ve `sentence-transformers` indirileceği için bu adım birkaç dakika sürebilir.
 
-`.env` dosyasını düzenle:
+### Adım 4 — Embedding modelini indirin (tek seferlik)
 
-```bash
-nano .env
-```
-
-| API Key | Gerekli mi? | Nasıl Alınır |
-|---------|-------------|--------------|
-| `GEMINI_API_KEY` | ✅ Zorunlu | [Google AI Studio](https://aistudio.google.com/apikey) — Ücretsiz |
-| `SCOPUS_API_KEY` | ⚠️ Opsiyonel | [Elsevier Dev Portal](https://dev.elsevier.com/) — Kurumsal erişim |
-| `GITHUB_TOKEN` | ⚠️ Push için | `gh auth token` veya GitHub Settings → Developer settings |
-| `SEMANTIC_SCHOLAR_API_KEY` | ⚠️ Opsiyonel | [S2 API Key](https://www.semanticscholar.org/product/api) — Rate limit artar |
-| `SERPAPI_KEY` | ⚠️ Opsiyonel | [SerpAPI](https://serpapi.com/) — Google Scholar bypass |
-| `KAGGLE_KEY` + `KAGGLE_USERNAME` | ⚠️ Opsiyonel | [Kaggle Account](https://www.kaggle.com/settings) |
-
-> **Not:** Semantic Scholar, arXiv, Zenodo, HuggingFace, Papers With Code, UCI ve OpenML API'leri **ücretsiz ve key gerektirmez**.
-
----
-
-## Kullanım
+Embedding ağırlıkları (~87 MB) repoya dahil **değildir**. Bir kez indirin:
 
 ```bash
-# Aktive venv
-source venv/bin/activate
-
-# Tam araştırma taraması
-python main.py full-scan
-
-# Tam tarama + GitHub push
-python main.py full-scan --push
-
-# Günlük artımlı tarama
-python main.py incremental
-
-# Haftalık rapor (md + docx)
-python main.py report
-
-# Danışman hocanın 3 sorusunu cevapla
-python main.py questions
-
-# Tez önerisi taslağı
-python main.py proposal
-
-# 7/24 otomatik çalışma
-python main.py daemon
-
-# Durum göster
-python main.py status
-
-# Rapor şablonunu analiz et
-python main.py analyze-template
-
-# Araçları test et
-python main.py test-tools
-
-# Sadece literatür
-python main.py literature
-
-# Sadece patent
-python main.py patent
-
-# Sadece veri seti
-python main.py datasets
-
-# Sadece sentez
-python main.py synthesize
+python download_model.py
 ```
 
----
+Bu komut modeli `models/all-MiniLM-L6-v2/` klasörüne kaydeder. Sonraki çalıştırmalarda model yerelden yüklenir, internete çıkmaz. (Bu adımı atlarsanız uygulama ilk çalıştırmada modeli otomatik olarak Hugging Face Hub'dan indirmeye çalışır.)
 
-## Dizin Yapısı
+### Adım 5 — Uygulamayı başlatın
 
-```
-thesis-research-agent/
-├── main.py                    # CLI giriş noktası
-├── config.yaml                # Ana konfigürasyon
-├── requirements.txt           # Python bağımlılıkları
-├── .env                       # API anahtarları (gitignore)
-├── .gitignore
-├── README.md
-├── setup.sh                   # Kurulum scripti
-│
-├── agents/                    # Ajan modülleri
-│   ├── llm_interface.py       # Google Gemini API wrapper
-│   ├── orchestrator.py        # Temel orkestrasyon
-│   ├── smart_orchestrator.py  # Akıllı pipeline yönetimi
-│   ├── literature_scout.py    # Akademik arama ajanı
-│   ├── patent_scanner.py      # Patent tarama ajanı
-│   ├── dataset_hunter.py      # Veri seti keşif ajanı
-│   ├── synthesis_agent.py     # Sentez ve gap analizi
-│   └── report_generator.py    # Rapor üretim ajanı
-│
-├── tools/                     # Araç modülleri
-│   ├── scholar_search.py      # Google Scholar API
-│   ├── scopus_search.py       # Scopus API
-│   ├── semantic_scholar_api.py # Semantic Scholar API
-│   ├── arxiv_search.py        # arXiv API
-│   ├── patent_search.py       # Çoklu patent arama
-│   ├── dataset_search.py      # Çoklu veri seti arama
-│   ├── pdf_downloader.py      # PDF indirme
-│   ├── pdf_parser.py          # PDF metin çıkarma
-│   └── docx_report.py         # DOCX rapor üretimi
-│
-├── skills/                    # Beceri modülleri
-│   ├── gap_analysis.py        # Boşluk tespiti
-│   ├── trend_detection.py     # Trend analizi
-│   ├── paper_summarizer.py    # Makale özetleme
-│   ├── comparison_matrix.py   # Karşılaştırma tablosu
-│   ├── citation_network.py    # Atıf ağı analizi
-│   └── research_question_gen.py # Araştırma sorusu üretimi
-│
-├── prompts/                   # LLM sistem promptları
-│   ├── orchestrator_system.md
-│   ├── literature_scout_system.md
-│   ├── patent_scanner_system.md
-│   ├── dataset_hunter_system.md
-│   ├── synthesis_system.md
-│   └── report_generator_system.md
-│
-├── automation/                # Otomasyon
-│   ├── scheduler.py           # Zamanlayıcı
-│   ├── github_sync.py         # Git otomasyonu
-│   └── cron_setup.sh          # Cron kurulumu
-│
-├── templates/                 # Şablonlar
-│   └── rapor_template.docx    # Hocanın rapor şablonu
-│
-├── data/                      # Veriler (gitignore hariç)
-│   ├── papers/
-│   │   ├── scholar_results/   # JSON arama sonuçları
-│   │   └── pdfs/              # İndirilen PDF'ler
-│   ├── patents/               # Patent sonuçları
-│   ├── datasets_catalog/      # Veri seti kataloğu
-│   ├── summaries/             # Sentez sonuçları
-│   └── cache/                 # Arama cache'i
-│
-├── reports/                   # Üretilen raporlar
-│   ├── weekly/                # Haftalık raporlar (.md + .docx)
-│   └── thesis_proposal/       # Tez önerisi taslakları
-│
-└── logs/                      # Log dosyaları
-    └── agent_runs/            # Çalışma logları
-```
-
----
-
-## Otomasyon Zamanlaması
-
-| Zamanlama | Görev |
-|-----------|-------|
-| Her Pazartesi 02:00 | Tam araştırma taraması |
-| Her gün 08:00 | Artımlı tarama (yeni yayınlar) |
-| Her Cuma 20:00 | Haftalık rapor üretimi |
-| Her 30 dakika | GitHub otomatik sync |
-
-Daemon modunda çalıştırmak için:
 ```bash
-nohup python main.py daemon > logs/daemon.log 2>&1 &
+streamlit run ui/app.py
+```
+
+Tarayıcınızda otomatik olarak `http://localhost:8501` açılır.
+
+### Adım 6 — Gemini API anahtarını girin
+
+İlk açılışta, zorunlu anahtar eksikse otomatik bir **🔑 API Anahtarları** penceresi açılır. Gemini anahtarınızı yapıştırıp **Kaydet**'e basın. Anahtar, proje kökündeki `.env` dosyasına yazılır; tekrar girmeniz gerekmez.
+
+✅ **Hazırsınız!** Artık araştırma sorunuzu girip *Araştırmayı Başlat* diyebilirsiniz.
+
+---
+
+## 🖱️ Uygulamayı Kullanma
+
+1. **Kaynak modunu seçin** (sol panel): 🌐 Web Arama veya 📂 Kütüphane.
+2. **Kaynakları işaretleyin** (arXiv / Scopus, ya da Zotero / Drive).
+3. **Filtreleri ayarlayın**: maksimum makale sayısı, yıl aralığı, sıralama.
+4. Üstteki kutuya **araştırma sorunuzu** olabildiğince açık şekilde yazın.
+   *Örn: "retrieval augmented generation methods for reducing hallucination in LLM agents"*
+5. **🔍 Araştırmayı Başlat**'a tıklayın.
+6. Pipeline çalışırken **canlı logları** ve **adım durumunu** izleyin.
+7. Bitince sekmelerden sonuçları inceleyin:
+   - **🔬 Sentez Raporu** — atıflı genel değerlendirme, gap analizi, trend analizi, tez önerileri.
+   - **📄 Makaleler** — bulunan makaleler (kart/tablo). Baştaki numara, sentezdeki `[N]` atıflarıyla eşleşir.
+   - **📋 Plan** — üretilen arama sorguları ve adım süreleri.
+   - **🧾 Loglar** — tüm pipeline logları.
+   - **⬇️ Export** — raporu **Markdown / JSON / CSV** olarak indirin.
+
+---
+
+## 🔀 Arama Modları
+
+Sistem birbirini dışlayan iki üst moda sahiptir:
+
+### 🌐 Web Arama Modu
+Açık akademik kaynaklarda, Planner'ın ürettiği sorgularla tarama yapar.
+- **arXiv** — anahtar gerektirmez, açık erişim PDF'ler indirilebilir.
+- **Scopus** — `SCOPUS_API_KEY` gerektirir. Abstract'lar Semantic Scholar ile zenginleştirilir.
+
+### 📂 Kütüphane Modu
+Kendi koleksiyonunuz üzerinde çalışır (Planner sorguları kullanılmaz; tüm koleksiyon alınır).
+- **Zotero** — `ZOTERO_API_KEY` + `ZOTERO_USER_ID` gerektirir; koleksiyon seçilir, PDF ekleri kullanılır.
+- **Google Drive** — "Bağlantıya sahip herkes" olarak paylaşılmış bir **klasör** linki verilir; içindeki tüm PDF'ler indirilip işlenir (auth gerekmez).
+
+> **Temel fark:** Web modu *internetteki güncel literatürü keşfeder*; Kütüphane modu ise *sizin elinizdeki belgeleri analiz eder*. Çoklu kaynak seçildiğinde sonuçlar otomatik tekilleştirilir ve makale kotası kaynaklar arasında dengelenir.
+
+---
+
+## 🔑 API Anahtarları
+
+Anahtarlar uygulama içindeki **🔑 API Anahtarları** penceresinden girilir ve proje kökündeki `.env` dosyasına yazılır.
+
+| Anahtar | Zorunlu mu? | Nereden alınır |
+|---------|-------------|----------------|
+| `GEMINI_API_KEY` | ✅ **Evet** | [Google AI Studio → Get API key](https://aistudio.google.com/app/apikey) |
+| `SCOPUS_API_KEY` | Sadece Scopus için | [Elsevier Developer Portal](https://dev.elsevier.com/apikey/manage) |
+| `ZOTERO_API_KEY` | Sadece Zotero için | [zotero.org/settings/keys](https://www.zotero.org/settings/keys) |
+| `ZOTERO_USER_ID` | Sadece Zotero için | Aynı sayfada "Your userID for use in API calls is: …" |
+
+`.env` dosyasını elle de düzenleyebilirsiniz:
+
+```env
+GEMINI_API_KEY=AIza...
+SCOPUS_API_KEY=
+ZOTERO_API_KEY=
+ZOTERO_USER_ID=
 ```
 
 ---
 
-## Lisans
-Özel kullanım — Enes'in yüksek lisans tez araştırması için.
+## 📁 Proje Yapısı
+
+```
+oto-research-multi-agent-ev-charging-main/
+├── ui/
+│   └── app.py                 # Streamlit arayüzü (giriş noktası)
+├── src/
+│   ├── graph/
+│   │   ├── research_graph.py  # LangGraph pipeline tanımı
+│   │   └── state.py           # Paylaşılan durum (ResearchState)
+│   ├── agents/
+│   │   ├── planner.py         # 🧠 Planner ajanı
+│   │   ├── literature.py      # 📚 Literature ajanı
+│   │   ├── embed.py           # 🗄️ Embed ajanı
+│   │   ├── pdf_fetcher.py     # 📄 PDF & Chunk ajanı
+│   │   ├── synthesis.py       # 🔬 Synthesis ajanı (multi-pass)
+│   │   └── llm.py             # Gemini LLM yardımcısı
+│   ├── rag/
+│   │   ├── embedder.py        # sentence-transformers embedding
+│   │   ├── chunker.py         # Paragraf-aware chunk'lama
+│   │   └── vector_store.py    # Qdrant (papers + paper_chunks)
+│   ├── tools/                 # arxiv / scopus / zotero / gdrive araçları
+│   └── config/
+│       └── api_keys.py        # .env okuma/yazma + maskeleme
+├── tools/                     # PDF indirici & parser
+├── docs/                      # 📄 Proje raporu (.docx)
+├── download_model.py          # Embedding modelini indirme betiği
+├── requirements.txt
+└── .env                       # API anahtarları (gizli)
+```
+
+**Üretilen veriler** (`.gitignore`'da):
+- `models/` — embedding modeli ağırlıkları
+- `data/qdrant/` — yerel vektör veritabanı
+- `data/papers/pdfs/` — indirilen PDF'ler
+
+---
+
+## 🛠️ Sık Karşılaşılan Sorunlar
+
+| Sorun | Çözüm |
+|-------|-------|
+| `GEMINI_API_KEY ortam değişkeni ayarlanmamış!` | 🔑 penceresinden Gemini anahtarını girin. |
+| Embedding modeli her açılışta indiriliyor | `python download_model.py` komutunu çalıştırın. |
+| arXiv `429` (rate limit) | Sistem otomatik bekler (exponential backoff). Maksimum makale sayısını düşürün. |
+| Scopus/Zotero "anahtar eksik" uyarısı | İlgili anahtarları `.env`'e ekleyin; o kaynağı kullanmayacaksanız işaretlemeyin. |
+| Yayıncı sitelerinden PDF inmiyor (IEEE, Springer, Elsevier…) | Bu domain'ler kapalı erişim olduğu için bilerek atlanır; makale yine abstract ile sentezde kullanılır. |
+| Streamlit dosya izleme hatası | `.streamlit/config.toml` içinde `fileWatcherType = "none"` ayarlıdır. |
+
+---
+
+*Akademik kullanım içindir. Sentezdeki tüm bulgular yalnızca sistemin bulduğu kaynaklara dayanır; nihai akademik çalışma için orijinal makaleler kontrol edilmelidir.*

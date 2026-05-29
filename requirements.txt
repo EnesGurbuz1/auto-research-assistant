@@ -10,8 +10,8 @@ loguru>=0.7.0
 langgraph>=0.2.0
 langchain-core>=0.2.0
 
-# LLM - Google Gemini
-google-generativeai>=0.8.0
+# LLM - Google Gemini (yeni SDK)
+google-genai>=1.0.0
 
 # arXiv search
 arxiv>=2.1.0
@@ -28,3 +28,10 @@ streamlit>=1.35.0
 # HTTP / utils
 requests>=2.31.0
 tenacity>=8.2.0
+httpx>=0.27.0
+
+# PDF
+pymupdf>=1.24.0
+
+# Google Drive public folder download (no OAuth needed for shared folders)
+gdown>=5.2.0

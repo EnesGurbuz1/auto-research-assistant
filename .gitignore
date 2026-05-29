@@ -40,3 +40,6 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Embedding model weights (87MB — pip install + python download_model.py ile indir)
+models/

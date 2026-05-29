@@ -31,6 +31,7 @@ class PDFParser:
 
         try:
             doc = fitz.open(str(pdf_path))
+            page_count = len(doc)
             text_parts = []
 
             for i, page in enumerate(doc):
@@ -40,7 +41,10 @@ class PDFParser:
 
             doc.close()
             full_text = "\n\n".join(text_parts)
-            logger.info(f"PDF parse edildi: {pdf_path.name} ({len(full_text)} karakter, {min(len(doc), max_pages)} sayfa)")
+            logger.info(
+                f"PDF parse edildi: {pdf_path.name} "
+                f"({len(full_text)} karakter, {min(page_count, max_pages)} sayfa)"
+            )
             return full_text
 
         except Exception as e:

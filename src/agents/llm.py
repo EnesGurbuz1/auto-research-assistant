@@ -4,42 +4,46 @@ Ortak LLM yardımcısı — google-genai SDK (Gemini 2.5 Flash).
 
 import os
 import json
+import re
 from loguru import logger
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 MODEL = "gemini-2.5-flash"
 
-_configured = False
+_client: genai.Client | None = None
 
 
-def _ensure_configured():
-    global _configured
-    if _configured:
-        return
+def _get_client() -> genai.Client:
+    global _client
+    if _client is not None:
+        return _client
 
     api_key = os.getenv("GEMINI_API_KEY", "")
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY ortam değişkeni ayarlanmamış!")
 
-    genai.configure(api_key=api_key)
-    _configured = True
+    _client = genai.Client(api_key=api_key)
+    return _client
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=20), reraise=True)
 def generate(prompt: str, system: str = "", temperature: float = 0.3) -> str:
     """LLM'den metin yanıtı üret."""
-    _ensure_configured()
-
-    generation_config = genai.types.GenerationConfig(
-        temperature=temperature,
-        max_output_tokens=8192,
-    )
+    client = _get_client()
 
     full_prompt = f"{system}\n\n---\n\n{prompt}" if system else prompt
-    model = genai.GenerativeModel(MODEL)
-    response = model.generate_content(full_prompt, generation_config=generation_config)
+
+    response = client.models.generate_content(
+        model=MODEL,
+        contents=full_prompt,
+        config=types.GenerateContentConfig(
+            temperature=temperature,
+            max_output_tokens=8192,
+        ),
+    )
     return response.text or ""
 
 
@@ -51,7 +55,6 @@ def generate_json(prompt: str, system: str = "") -> dict:
         "Yalnızca ham JSON objesi."
     )
     raw = generate(prompt + json_hint, system=system, temperature=0.1)
-    import re
     cleaned = raw.strip()
     cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned)
     cleaned = re.sub(r'\s*```$', '', cleaned)
@@ -59,7 +62,6 @@ def generate_json(prompt: str, system: str = "") -> dict:
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
-        # Son geçerli } veya ]'ye kadar kes ve kapat
         for ch in ("}", "]"):
             idx = cleaned.rfind(ch)
             if idx > 0:
