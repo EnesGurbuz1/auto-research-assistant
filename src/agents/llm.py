@@ -13,7 +13,9 @@ from google.genai import types
 
 MODEL = "gemini-2.5-flash"
 
-_client: genai.Client | None = None
+from typing import Optional
+
+_client: Optional[genai.Client] = None
 
 
 def _get_client() -> genai.Client:

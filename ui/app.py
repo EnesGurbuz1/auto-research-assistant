@@ -13,7 +13,7 @@ import json
 import html
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 import pandas as pd
 import streamlit as st
@@ -850,7 +850,7 @@ def _render_agent_card(
     detail: str,
     icon: str = "⚙️",
     status: str = "",
-    queries: List[str] | None = None,
+    queries: Optional[List[str]] = None,
 ) -> str:
     cls = f"agent-card {status}".strip()
 
@@ -868,7 +868,7 @@ def _render_agent_card(
     """
 
 
-def _render_paper_card(p: Dict[str, Any], idx: int | None = None) -> str:
+def _render_paper_card(p: Dict[str, Any], idx: Optional[int] = None) -> str:
     authors = p.get("authors", []) or []
     author_str = ", ".join(authors[:3])
     if len(authors) > 3:

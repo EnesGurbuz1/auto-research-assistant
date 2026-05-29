@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from loguru import logger
 
@@ -110,7 +110,7 @@ def _parse_env_lines(path: Path) -> List[str]:
         return []
 
 
-def save_keys(updates: Dict[str, str], deletes: List[str] | None = None) -> Path:
+def save_keys(updates: Dict[str, str], deletes: Optional[List[str]] = None) -> Path:
     """
     Anahtarları .env dosyasına yazar (varsa mevcut satırları korur),
     ve process ortam değişkenlerini günceller.

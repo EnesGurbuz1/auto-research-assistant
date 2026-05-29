@@ -75,7 +75,7 @@ python3 --version
 `.zip` dosyasını açtıysanız klasöre girin:
 
 ```bash
-cd oto-research-multi-agent-ev-charging-main
+cd auto-research-assistant
 ```
 
 ### Adım 2 — Sanal ortam oluşturun (önerilir)
@@ -188,7 +188,7 @@ ZOTERO_USER_ID=
 ## 📁 Proje Yapısı
 
 ```
-oto-research-multi-agent-ev-charging-main/
+auto-research-assistant/
 ├── ui/
 │   └── app.py                 # Streamlit arayüzü (giriş noktası)
 ├── src/
