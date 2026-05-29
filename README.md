@@ -1,4 +1,4 @@
-# 🔬 Otonom Araştırma Asistanı
+# 🔬 Autonomous Research Assistant (ARA)
 
 **Multi-agent literatür tarama, RAG tabanlı embedding ve grounded (kaynağa dayalı) sentez sistemi.**
 
@@ -25,18 +25,8 @@ Bir araştırma sorusu girersiniz; sistem otomatik olarak bir araştırma planı
 
 Sistem, **LangGraph** ile kurulmuş 5 ajanlı bir boru hattıdır (pipeline). Ajanlar paylaşılan bir durum (state) üzerinden sırayla çalışır:
 
-```
-Araştırma Sorusu
-      │
-      ▼
-🧠 Planner  ──►  📚 Literature  ──►  🗄️ Embed  ──►  📄 PDF & Chunk  ──►  🔬 Synthesis
- (strateji +     (kaynaklardan      (vektör DB'ye    (PDF indir, parçala,   (per-paper +
-  4 arama         makale topla,      kaydet)          chunk'ları indeksle)   cross-paper
-  sorgusu)        dedup, filtrele)                                            sentez)
-      │
-      ▼
-Atıflı Sentez Raporu  (Markdown / JSON / CSV indirilebilir)
-```
+![ARA Scheme](docs/ARA-scheme.png)
+
 
 | Ajan | Görevi |
 |------|--------|
